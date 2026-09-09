@@ -32,15 +32,16 @@ Playwright uses your installed Chrome (`channel="chrome"`). You do not need `pla
 ```bash
 photos login
 photos albums
-photos albums --format json
+photos albums --compact | jq
 photos list
 photos list --album <id-or-url>
 photos list --album <id> --limit 20
-photos search "kids"
-photos search "kids" --format json
-photos info <id-or-url>
-photos download <id-or-url>
-photos download <id> -o ~/Downloads
+photos list --compact --select id,kind,taken_at
+photos search "beach"
+photos info <id>
+photos info <id> --format json --compact
+photos download <id>
+photos download <id> -o ./out --quiet
 ```
 
 `photos login` opens Chrome. Sign in, wait until Photos loads, and the window closes. The profile is saved at `~/.photos-cli/chrome-profile/`.
