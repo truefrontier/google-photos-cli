@@ -61,6 +61,7 @@ async def open_context(playwright, headless: bool):
         headless=headless,
         channel="chrome",
         args=STEALTH,
+        accept_downloads=True,
     )
 
 
@@ -220,6 +221,101 @@ async def scrape_info(vid: str) -> dict:
     }
 
 
+
+async def download_item(vid: str, out_dir: Path) -> Path:
+    """Download original via Photos usercontent (=dv for video, =d for photo)."""
+    out_dir = out_dir.resolve()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    media_urls: list[str] = []
+
+    async with async_playwright() as p:
+        context = await open_context(p, headless=True)
+        page = context.pages[0] if context.pages else await context.new_page()
+        try:
+            page.on(
+                "request",
+                lambda req: media_urls.append(req.url)
+                if "photos.fife.usercontent.google.com/pw/" in req.url
+                else None,
+            )
+            await page.goto(
+                f"https://photos.google.com/photo/{vid}",
+                wait_until="domcontentloaded",
+            )
+            await ensure_photos(page)
+            await page.wait_for_timeout(4000)
+            # Nudge playback so video media URLs appear.
+            try:
+                await page.keyboard.press("Space")
+                await page.wait_for_timeout(1500)
+            except Exception:
+                pass
+
+            bases: list[str] = []
+            for url in media_urls:
+                match = re.search(
+                    r"(https://photos\.fife\.usercontent\.google\.com/pw/[^?=]+)",
+                    url,
+                )
+                if match:
+                    bases.append(match.group(1))
+            base = next(iter(dict.fromkeys(bases)), None)
+            if not base:
+                raise RuntimeError(
+                    "No media URL found for this item. Session may be expired. Run: photos login"
+                )
+
+            # Prefer video original, then still original.
+            chosen = None
+            body = None
+            for suffix in ("=dv", "=d"):
+                resp = await context.request.get(base + suffix)
+                if resp.status != 200:
+                    continue
+                length = int(resp.headers.get("content-length") or 0)
+                ctype = (resp.headers.get("content-type") or "").lower()
+                # Skip tiny poster-like responses when a bigger original exists.
+                if length and length < 50_000 and suffix == "=d":
+                    # still allow small photos, but try to keep going if dv already failed
+                    body = await resp.body()
+                    chosen = (resp, body)
+                    break
+                body = await resp.body()
+                if not body:
+                    continue
+                chosen = (resp, body)
+                if "video/" in ctype or suffix == "=dv" and length > 50_000:
+                    break
+                if suffix == "=d":
+                    break
+
+            if not chosen:
+                raise RuntimeError("Could not download original for this item")
+
+            resp, body = chosen
+            cd = resp.headers.get("content-disposition") or ""
+            match = re.search(r'filename="?([^";]+)"?', cd)
+            name = match.group(1) if match else None
+            if not name:
+                ctype = (resp.headers.get("content-type") or "").lower()
+                if "mp4" in ctype or "video/" in ctype:
+                    name = f"{vid}.mp4"
+                elif "jpeg" in ctype or "jpg" in ctype:
+                    name = f"{vid}.jpg"
+                elif "png" in ctype:
+                    name = f"{vid}.png"
+                else:
+                    name = f"{vid}.bin"
+            dest = out_dir / name
+            dest.write_bytes(body)
+        finally:
+            await context.close()
+
+    if not dest.exists() or dest.stat().st_size == 0:
+        raise RuntimeError("Download finished empty")
+    return dest
+
+
 @click.group()
 def main():
     """Unofficial read-only CLI for your Google Photos library."""
@@ -329,6 +425,19 @@ def info(photo, fmt):
     for key in ("id", "kind", "taken_at", "url"):
         table.add_row(key, "" if data.get(key) is None else str(data.get(key)))
     console.print(table)
+
+
+
+
+@main.command("download")
+@click.argument("photo")
+@click.option("-o", "out_dir", type=click.Path(), default=".", help="Directory to write the file")
+def download_cmd(photo, out_dir):
+    """Download the original photo or video."""
+    need_session()
+    vid = photo_id(photo)
+    path = asyncio.run(download_item(vid, Path(out_dir)))
+    console.print(f"Wrote {path} ({path.stat().st_size} bytes)")
 
 
 if __name__ == "__main__":

@@ -39,6 +39,8 @@ photos list --album <id> --limit 20
 photos search "kids"
 photos search "kids" --format json
 photos info <id-or-url>
+photos download <id-or-url>
+photos download <id> -o ~/Downloads
 ```
 
 `photos login` opens Chrome. Sign in, wait until Photos loads, and the window closes. The profile is saved at `~/.photos-cli/chrome-profile/`.
@@ -49,10 +51,11 @@ If a command says the session expired, run `photos login` again.
 
 After login, the CLI opens Photos pages with your saved Chrome profile and reads album and media tiles from the signed-in UI. Google Photos talks to itself through opaque `batchexecute` RPCs, so this first cut stays on the page surface rather than hard-coding fragile RPC ids.
 
-Read-only. It cannot upload, edit, delete, share, or download originals yet.
+Read-only against the library. It can download originals you already own. It cannot upload, edit, delete, or share.
 
 ## Limits
 
 - Your library only.
 - `list` and `search` load what the page renders after a short scroll. Raise `--limit` only within that window.
 - `info` is thinner than the labels returned by `list` and `search`.
+- `download` fetches the original through Photos media URLs (`=dv` for video, `=d` for photos) and saves the suggested filename.
