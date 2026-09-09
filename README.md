@@ -6,7 +6,7 @@ Built by [True Frontier](https://truefrontierapps.com). Not affiliated with Goog
 
 The session stays on your machine, in a local Chrome profile. This tool does not print cookies, and it does not ship a cloud login.
 
-The official Photos Library API is locked down for most third-party apps. This CLI drives the signed-in web UI the same way [loom-cli](https://github.com/truefrontier/loom-cli) and google-recorder-cli do.
+The official Photos Library API is locked down for most third-party apps. This CLI drives the signed-in web UI the same way [loom-cli](https://github.com/truefrontier/loom-cli) and [google-recorder-cli](https://github.com/CodefiLabs/google-recorder-cli) do.
 
 ## Requirements
 
