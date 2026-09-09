@@ -1,0 +1,23 @@
+[project]
+name = "google-photos-cli"
+version = "0.1.0"
+description = "Unofficial read-only CLI for Google Photos. Sign in once, then list albums, search, and inspect items."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [{ name = "True Frontier" }]
+dependencies = [
+    "playwright>=1.40.0",
+    "click>=8.1.0",
+    "rich>=13.0.0",
+]
+
+[project.scripts]
+photos = "photos_cli.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["photos_cli"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
