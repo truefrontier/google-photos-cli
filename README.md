@@ -53,6 +53,18 @@ After login, the CLI opens Photos pages with your saved Chrome profile and reads
 
 Read-only against the library. It can download originals you already own. It cannot upload, edit, delete, or share.
 
+
+## Agent output
+
+Inspired by [CLI Printing Press](https://github.com/mvanhorn/cli-printing-press) agent UX:
+
+- Piped stdout auto-uses JSON when `--format` is `table` (no `--json` needed)
+- `--compact` for high-gravity fields only
+- `--select id,title` to project JSON/CSV fields
+- `--csv` for spreadsheet-friendly rows
+- `--quiet` / `-q` to suppress status lines
+- Exit codes: `0` ok, `2` usage, `3` not found, `4` auth, `5` api/runtime
+
 ## Limits
 
 - Your library only.

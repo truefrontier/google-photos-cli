@@ -12,6 +12,19 @@ from playwright.async_api import async_playwright
 from rich.console import Console
 from rich.table import Table
 
+from photos_cli.agent_ux import (
+    EXIT_NOT_FOUND,
+    agent_output_options,
+    compact_rows,
+    die,
+    emit_csv,
+    emit_json,
+    note_showing,
+    resolve_format,
+    select_fields,
+)
+
+
 HOME = Path.home() / ".photos-cli"
 PROFILE = HOME / "chrome-profile"
 STEALTH = ["--disable-blink-features=AutomationControlled"]
@@ -27,8 +40,8 @@ def has_session() -> bool:
 
 def need_session() -> None:
     if not has_session():
-        console.print("[red]No session. Run: photos login[/red]")
-        raise SystemExit(1)
+        from photos_cli.agent_ux import EXIT_AUTH, die
+        die("No session found.", EXIT_AUTH, hint="Run: photos login")
 
 
 def clean_title(text: str) -> str:
@@ -327,10 +340,14 @@ def login_cmd():
     asyncio.run(login())
 
 
+PHOTO_COMPACT = ("id", "kind", "taken_at")
+ALBUM_COMPACT = ("id", "title")
+
+
 @main.command()
-@click.option("--format", "fmt", type=click.Choice(["table", "json"]), default="table")
+@agent_output_options()
 @click.option("--id-only", is_flag=True)
-def albums(fmt, id_only):
+def albums(fmt, compact, select, quiet, as_csv, id_only):
     """List albums / collections."""
     need_session()
     rows = asyncio.run(scrape_albums())
@@ -338,8 +355,14 @@ def albums(fmt, id_only):
         for row in rows:
             click.echo(row["id"])
         return
+    data = compact_rows(rows, ALBUM_COMPACT) if compact else rows
+    data = select_fields(data, select)
+    fmt = resolve_format(fmt)
+    if as_csv:
+        emit_csv(data if isinstance(data, list) else [data], ALBUM_COMPACT if compact else None)
+        return
     if fmt == "json":
-        click.echo(json.dumps(rows, indent=2))
+        emit_json(data)
         return
     table = Table(title="Albums")
     table.add_column("ID", style="cyan", no_wrap=True)
@@ -347,15 +370,15 @@ def albums(fmt, id_only):
     for row in rows:
         table.add_row(row["id"], row["title"])
     console.print(table)
-    console.print(f"{len(rows)} albums")
+    note_showing(len(rows), quiet=quiet, noun="albums")
 
 
 @main.command("list")
 @click.option("--album", "album", default=None, help="Album id or URL")
 @click.option("--limit", type=int, default=50)
-@click.option("--format", "fmt", type=click.Choice(["table", "json"]), default="table")
+@agent_output_options()
 @click.option("--id-only", is_flag=True)
-def list_cmd(album, limit, fmt, id_only):
+def list_cmd(album, limit, fmt, compact, select, quiet, as_csv, id_only):
     """List photos in an album, or recent library tiles if no album is given."""
     need_session()
     if album:
@@ -368,8 +391,14 @@ def list_cmd(album, limit, fmt, id_only):
         for row in rows:
             click.echo(row["id"])
         return
+    data = compact_rows(rows, PHOTO_COMPACT) if compact else rows
+    data = select_fields(data, select)
+    fmt = resolve_format(fmt)
+    if as_csv:
+        emit_csv(data if isinstance(data, list) else [data], PHOTO_COMPACT if compact else None)
+        return
     if fmt == "json":
-        click.echo(json.dumps(rows, indent=2))
+        emit_json(data)
         return
     table = Table(title="Photos")
     table.add_column("ID", style="cyan", no_wrap=True)
@@ -378,15 +407,15 @@ def list_cmd(album, limit, fmt, id_only):
     for row in rows:
         table.add_row(row["id"], row.get("kind") or "", row.get("taken_at") or "")
     console.print(table)
-    console.print(f"{len(rows)} photos")
+    note_showing(len(rows), quiet=quiet, noun="photos")
 
 
 @main.command()
 @click.argument("query")
 @click.option("--limit", type=int, default=50)
-@click.option("--format", "fmt", type=click.Choice(["table", "json"]), default="table")
+@agent_output_options()
 @click.option("--id-only", is_flag=True)
-def search(query, limit, fmt, id_only):
+def search(query, limit, fmt, compact, select, quiet, as_csv, id_only):
     """Search your library."""
     need_session()
     url = f"https://photos.google.com/search/{quote(query)}"
@@ -395,29 +424,43 @@ def search(query, limit, fmt, id_only):
         for row in rows:
             click.echo(row["id"])
         return
-    if fmt == "json":
-        click.echo(json.dumps(rows, indent=2))
+    data = compact_rows(rows, PHOTO_COMPACT) if compact else rows
+    data = select_fields(data, select)
+    fmt = resolve_format(fmt)
+    if as_csv:
+        emit_csv(data if isinstance(data, list) else [data], PHOTO_COMPACT if compact else None)
         return
-    table = Table(title=f'Search: {query}')
+    if fmt == "json":
+        emit_json(data)
+        return
+    table = Table(title=f"Search: {query}")
     table.add_column("ID", style="cyan", no_wrap=True)
     table.add_column("Kind", style="green")
     table.add_column("Taken", style="white")
     for row in rows:
         table.add_row(row["id"], row.get("kind") or "", row.get("taken_at") or "")
     console.print(table)
-    console.print(f"{len(rows)} photos")
+    note_showing(len(rows), quiet=quiet, noun="photos")
 
 
 @main.command()
 @click.argument("photo")
-@click.option("--format", "fmt", type=click.Choice(["table", "json"]), default="table")
-def info(photo, fmt):
+@agent_output_options()
+def info(photo, fmt, compact, select, quiet, as_csv):
     """Show one photo or video."""
     need_session()
     vid = photo_id(photo)
     data = asyncio.run(scrape_info(vid))
+    if not data or not data.get("id"):
+        die(f"No photo {vid}", EXIT_NOT_FOUND, hint="Run: photos list --id-only")
+    payload = {k: data.get(k) for k in ("id", "kind", "taken_at", "url")} if compact else data
+    payload = select_fields(payload, select)
+    fmt = resolve_format(fmt)
+    if as_csv:
+        emit_csv([payload] if isinstance(payload, dict) else payload)
+        return
     if fmt == "json":
-        click.echo(json.dumps(data, indent=2))
+        emit_json(payload)
         return
     table = Table(title=data.get("label") or vid)
     table.add_column("Field", style="cyan")
@@ -427,17 +470,19 @@ def info(photo, fmt):
     console.print(table)
 
 
-
-
 @main.command("download")
 @click.argument("photo")
 @click.option("-o", "out_dir", type=click.Path(), default=".", help="Directory to write the file")
-def download_cmd(photo, out_dir):
+@click.option("--quiet", "-q", is_flag=True)
+def download_cmd(photo, out_dir, quiet):
     """Download the original photo or video."""
     need_session()
     vid = photo_id(photo)
     path = asyncio.run(download_item(vid, Path(out_dir)))
-    console.print(f"Wrote {path} ({path.stat().st_size} bytes)")
+    if quiet:
+        click.echo(str(path))
+    else:
+        console.print(f"Wrote {path} ({path.stat().st_size} bytes)")
 
 
 if __name__ == "__main__":
