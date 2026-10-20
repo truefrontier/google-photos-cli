@@ -1,3 +1,5 @@
+> **Archived.** Replaced by [webcli](https://github.com/truefrontier/webcli). Install: `brew install truefrontier/tap/webcli` or `pipx install truefrontier-webcli`. The equivalent command is now `webcli photos`.
+
 # google-photos-cli
 
 Unofficial read-only CLI for [Google Photos](https://photos.google.com). Sign in once in Chrome. Then list albums, search your library, and inspect items.
